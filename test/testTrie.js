@@ -1,5 +1,5 @@
 var should = require("should");
-var combomgr = require("../combomgr");
+var combomgr = require("../combo");
 
 var TrieNode = combomgr.TrieNode;
 
@@ -95,7 +95,7 @@ describe('TrieNode', function() {
                 b.parent.should.equal(trie);
             });
             it('should have preserve as false', function() {
-                e(b._metadata.preserve.should.be.false);
+                e(b.metadata.preserve.should.be.false);
             });
         });
         describe("a after adding empty sequence", function() {
@@ -236,7 +236,7 @@ describe('TrieNode', function() {
             });
             var b = trie.children["b"];
             it('should have preserve as true', function() {
-                e(b._metadata.preserve.should.be.true);
+                e(b.metadata.preserve.should.be.true);
             });
         });
         describe("nothing added as a child", function() {
