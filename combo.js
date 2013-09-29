@@ -6,28 +6,31 @@ function TrieNode(val, parent, data) {
     this.value = val;
     this.parent = parent;
     this.data = data;
-    this.metadata = {
-        "preserve": false,
-    };
+    this.has_data = false;
+
+    this.options = {};
+    this.leaf_options = {};
+
     this.children = {};
 }
 
-TrieNode.prototype.add = function(sequence, leafData, options) {
-    options = options || {};
-    var index = options.index || 0;
+TrieNode.prototype.add = function(sequence, leafData, index, options, leaf_options) {
+    this.options = options || {};
+    index = index || 0;
+
     // At this point, there are no children left
     if (index === sequence.length) {
+        this.has_data = true;
         this.data = leafData;
-        if (options.preserve) {
-            this.metadata.preserve = options.preserve || false;
-        }
+        // These properties are only set if they are leaf nodes
+        this.leaf_options = leaf_options || {};
     } else if (index < sequence.length) {
         var token = sequence[index];
         if (!(token in this.children)) {
             this.children[token] = new TrieNode(token, this);
         }
-        options.index = index + 1;
-        this.children[token].add(sequence, leafData, options);
+        index += 1;
+        this.children[token].add(sequence, leafData, index, options, leaf_options);
     }
 };
 
@@ -158,51 +161,146 @@ var keycodes = {
     222 : "\'"
 };
 
-ComboMgr.advanceBuffer = function(key) {
+ComboMgr.advanceBuffer = function(key, time) {
+    // For every trie in the buffer
     for (var i = 0; i < this.keyBuffer.length; i++) {
+        // Get the next trie in the buffer
         var trie = this.keyBuffer[i];
+        if (typeof trie === 'undefined') {
+            continue;
+        }
+        var timeout = trie.options.timeout || 0;
+        var last_time = trie.options.last_time || time;
+        if (timeout !== 0) {
+            if ((time - last_time) > timeout) {
+                // If timeout, delete this element
+                delete this.keyBuffer[i];
+                continue;
+            }
+        }
+        trie.options.last_time = time;
+        // Get the entry corresponding to the keypress
+        // If none exists, next is undefined
         var next = trie.get([key]);
         if (typeof next !== 'undefined') {
-            if (next.isLeaf()) {
+            if (next.has_data) {
+                var preserve = next.leaf_options.preserve || false;
+                var propagate = next.leaf_options.propagate || false;
+
+                // Call next.data() since we are storing the callback as data
                 next.data();
-                this.keyBuffer = [];
-                return;
+
+                if (!preserve && !propagate) {
+                    this.keyBuffer = [];
+                    return;
+                } else if (!preserve && propagate) {
+                    delete this.keyBuffer[i];
+                } else if (preserve && !propagate) {
+                    this.keyBuffer = this.keyBuffer.slice(0, i + 1);
+                    return;
+                }
+                // Otherwise if we want preserve and propagate
+                // No action is necessary
             } else {
                 this.keyBuffer[i] = next;
             }
+        } else {
+            if (!trie.options.fuzzy) {
+                // If we don't want fuzzy input
+                delete this.keyBuffer[i];
+            }
         }
     }
+    this.cleanBuffer();
     var newTrie = this.baseTrie.get([key]);
     if (typeof newTrie !== 'undefined') {
+        newTrie.options.last_time = time;
         this.keyBuffer.push(newTrie);
     }
 };
 
-ComboMgr.fireKeyDown = function(key) {
-    this.advanceBuffer(key);
+// Removes deleted elements in the keyBuffer for better performance
+ComboMgr.cleanBuffer = function() {
+    var len = this.keyBuffer.length,
+        newBuffer = [],
+        i;
+
+    for (i = 0; i < len; i++) {
+        if (typeof this.keyBuffer[i] !== 'undefined') {
+            // copy non-empty values to the end of the array
+            newBuffer.push(this.keyBuffer[i]);
+        }
+    }
+    this.keyBuffer = newBuffer;
 };
-ComboMgr.fireKeyUp = function(key) {
+
+ComboMgr.fireKeyDown = function(key, time) {
+    this.advanceBuffer(key, time);
+};
+ComboMgr.fireKeyUp = function(key, time) {
 };
 
 // API Methods
 var Combo = {};
-Combo.on = function(seq, func) {
-    ComboMgr.baseTrie.add(seq, func);
+
+// Combo.on
+// @arg seq - The combo sequence of keys to handle
+// @arg func - The callback function called on combo activation
+// @arg opt - A set of options:
+//
+// Options:
+// @opt "preserve" - Set true if future key inputs should still build upon
+//                   this sequence. False by default.
+//                   This isn't really a big issue unless specifying more keys
+//                   should activate another combo. This is intended for
+//                   single key combos
+// @opt "fuzzy" - Set true if key combo should not care about any extra
+//                keys. Should generally be used with a timeout for combos.
+//                False by default.
+//                Default behavior is to strictly require sequences to be in
+//                a certain order when pressed.
+// @opt "propagate" - Set true if activating this combo should still allow
+//                    subsequences(or supersequences if fuzzy input is allowed)
+//                    of this combo to activate. False by default.
+//                    Default behavior is to stop processing any potential
+//                    sequences after the first activation.
+// @opt "timeout" - Any possible sequence will be canceled if a key has not
+//                  been activated within the timeout period. 0 by default.
+//                  0 means no timeout.
+Combo.on = function(seq, func, opt) {
+    if (typeof seq === 'undefined') {
+        throw new TypeError("Please specify the combo sequence");
+    }
+    if (typeof func === 'undefined') {
+        throw new TypeError("Please specify the callback function");
+    }
+    opt = opt || {};
+    var options = {};
+    var leaf_options = {};
+
+    options.fuzzy = opt.fuzzy || false;
+    options.timeout = opt.timeout || 0;
+
+    leaf_options.propagate = opt.propagate || false;
+    leaf_options.preserve = opt.preserve || false;
+    ComboMgr.baseTrie.add(seq, func, 0, options, leaf_options);
 };
 
 var onKeyDown = function(e) {
     var keycode = e.keyCode;
+    var time = (new Date()).getTime();
     if (!(keyHeld[keycode])) {
         keyHeld[keycode] = true;
         var key = keycodes[keycode];
-        ComboMgr.fireKeyDown(key);
+        ComboMgr.fireKeyDown(key, time);
     }
 };
 var onKeyUp = function(e) {
     var keycode = e.keyCode;
+    var time = (new Date()).getTime();
     keyHeld[keycode] = false;
     var key = keycodes[keycode];
-    ComboMgr.fireKeyUp(key);
+    ComboMgr.fireKeyUp(key, time);
 };
 
 // Initial setup

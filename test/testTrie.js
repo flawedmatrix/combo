@@ -94,8 +94,11 @@ describe('TrieNode', function() {
             it('should have a as its parent', function() {
                 b.parent.should.equal(trie);
             });
-            it('should have preserve as false', function() {
-                e(b.metadata.preserve.should.be.false);
+            it('should have nothing as options', function() {
+                e(b.options.should.eql({}));
+            });
+            it('should have nothing as leaf options', function() {
+                e(b.leaf_options.should.eql({}));
             });
         });
         describe("a after adding empty sequence", function() {
@@ -230,18 +233,18 @@ describe('TrieNode', function() {
     describe('#add/3', function() {
         describe("b added as a child", function() {
             var trie = new TrieNode("a");
-            trie.add(["hey", "b"], "bdata", { index : 1, preserve : true });
+            trie.add(["hey", "b"], "bdata", 1, {}, { preserve : true });
             it('should exist', function() {
                 trie.children.should.have.keys("b");
             });
             var b = trie.children["b"];
             it('should have preserve as true', function() {
-                e(b.metadata.preserve.should.be.true);
+                e(b.leaf_options.preserve.should.be.true);
             });
         });
         describe("nothing added as a child", function() {
             var trie = new TrieNode("a");
-            trie.add(["hey", "b"], "adata", { index : 2 });
+            trie.add(["hey", "b"], "adata", 2);
             it('should have no children', function() {
                 e(trie.isLeaf().should.be.true);
             });
