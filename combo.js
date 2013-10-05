@@ -161,7 +161,8 @@ var keycodes = {
     222 : "\'"
 };
 
-ComboMgr.advanceBuffer = function(key, time) {
+ComboMgr.advanceBuffer = function(key, time, up) {
+    key = key + ":" + (up? "up" : "down");
     // For every trie in the buffer
     for (var i = 0; i < this.keyBuffer.length; i++) {
         // Get the next trie in the buffer
@@ -179,6 +180,10 @@ ComboMgr.advanceBuffer = function(key, time) {
             }
         }
         trie.options.last_time = time;
+        // Ignores key up if specified
+        if (trie.options.ignoreKeyup && up) {
+            return;
+        }
         // Get the entry corresponding to the keypress
         // If none exists, next is undefined
         var next = trie.get([key]);
@@ -235,15 +240,27 @@ ComboMgr.cleanBuffer = function() {
 };
 
 ComboMgr.fireKeyDown = function(key, time) {
-    this.advanceBuffer(key, time);
+    this.advanceBuffer(key, time, false);
 };
 ComboMgr.fireKeyUp = function(key, time) {
+    this.advanceBuffer(key, time, true);
 };
 
 // API Methods
 var Combo = {};
 
-// Combo.on
+// By default it only handles keydowns and ignores keyups
+Combo.on = function(seq, func, opt) {
+    seq = this.validateSeq(seq);
+    var verboseSeq = seq.map(function(key) {
+        return key + ":down";
+    });
+    opt = opt || {};
+    opt.ignoreKeyup = opt.ignoreKeyup || true;
+    this.onEvent(verboseSeq, func, opt);
+};
+
+// Combo.onEvent
 // @arg seq - The combo sequence of keys to handle
 // @arg func - The callback function called on combo activation
 // @arg opt - A set of options:
@@ -267,10 +284,11 @@ var Combo = {};
 // @opt "timeout" - Any possible sequence will be canceled if a key has not
 //                  been activated within the timeout period. 0 by default.
 //                  0 means no timeout.
-Combo.on = function(seq, func, opt) {
-    if (typeof seq === 'undefined') {
-        throw new TypeError("Please specify the combo sequence");
-    }
+// @opt "ignoreKeyup" - If true, this sequence ignores keyups. Default is false.
+
+
+Combo.onEvent = function(seq, func, opt) {
+    seq = this.validateSeq(seq);
     if (typeof func === 'undefined') {
         throw new TypeError("Please specify the callback function");
     }
@@ -280,10 +298,24 @@ Combo.on = function(seq, func, opt) {
 
     options.fuzzy = opt.fuzzy || false;
     options.timeout = opt.timeout || 0;
+    options.ignoreKeyup = opt.ignoreKeyup || false;
 
     leaf_options.propagate = opt.propagate || false;
     leaf_options.preserve = opt.preserve || false;
     ComboMgr.baseTrie.add(seq, func, 0, options, leaf_options);
+};
+
+Combo.validateSeq = function(seq) {
+    if (typeof seq === 'undefined') {
+        throw new TypeError("Please specify the combo sequence");
+    } else if (typeof seq === 'string') {
+        seq = seq.split(">");
+    }
+    // Remove whitespace from elements of the sequence
+    seq = seq.map(function(key) {
+        return key.replace(/\s+/g, '');
+    });
+    return seq;
 };
 
 var onKeyDown = function(e) {
