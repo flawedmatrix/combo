@@ -188,6 +188,7 @@ ComboMgr.advanceBuffer = function(key, time, up) {
         // If none exists, next is undefined
         var next = trie.get([key]);
         if (typeof next !== 'undefined') {
+            // The sequence was recognized
             if (next.has_data) {
                 var preserve = next.leaf_options.preserve || false;
                 var propagate = next.leaf_options.propagate || false;
@@ -196,20 +197,33 @@ ComboMgr.advanceBuffer = function(key, time, up) {
                 next.data();
 
                 if (!preserve && !propagate) {
+                    // We don't want future key sequences to build off this
+                    // sequence, so we clear the key buffer to prevent
+                    // any other subsequences or supersequences from activating
                     this.keyBuffer = [];
                     return;
                 } else if (!preserve && propagate) {
+                    // We don't want future key sequences to build off this
+                    // sequence, but it's okay if existing subsequences or
+                    // supersequences can still fire.
                     delete this.keyBuffer[i];
                 } else if (preserve && !propagate) {
+                    // We want future key sequences to build off this sequence
+                    // but we don't want any existing subsequences or
+                    // supersequences to fire after this activation, so we
+                    // cut off the buffer after this.
                     this.keyBuffer = this.keyBuffer.slice(0, i + 1);
                     return;
                 }
-                // Otherwise if we want preserve and propagate
-                // No action is necessary
+                // Otherwise if we want future key sequences to build off this
+                // sequence and it's okay if existing subsequences or
+                // supersequences fire after this, then no action is necessary
             } else {
+                // Advance if this is not a registered node sequuence
                 this.keyBuffer[i] = next;
             }
         } else {
+            // The sequence was not recognized
             if (!trie.options.fuzzy) {
                 // If we don't want fuzzy input
                 delete this.keyBuffer[i];
@@ -219,6 +233,23 @@ ComboMgr.advanceBuffer = function(key, time, up) {
     this.cleanBuffer();
     var newTrie = this.baseTrie.get([key]);
     if (typeof newTrie !== 'undefined') {
+        // We need this case to handle single key activations
+        if (newTrie.has_data) {
+            var nt_preserve = newTrie.leaf_options.preserve || false;
+            var nt_propagate = newTrie.leaf_options.propagate || false;
+
+            // Call newTrie.data() since we are storing the callback as data
+            newTrie.data();
+            if (!nt_propagate) {
+                // We don't want any existing subsequences or supersequences
+                // to fire after this activation
+                this.keyBuffer = [];
+            }
+            if (!nt_preserve) {
+                // We don't want future key sequences to build off this sequence
+                return;
+            }
+        }
         newTrie.options.last_time = time;
         this.keyBuffer.push(newTrie);
     }
@@ -277,8 +308,8 @@ Combo.on = function(seq, func, opt) {
 //                Default behavior is to strictly require sequences to be in
 //                a certain order when pressed.
 // @opt "propagate" - Set true if activating this combo should still allow
-//                    subsequences(or supersequences if fuzzy input is allowed)
-//                    of this combo to activate. False by default.
+//                    existing subsequences (or supersequences if fuzzy input
+//                    is allowed) of this combo to activate. False by default.
 //                    Default behavior is to stop processing any potential
 //                    sequences after the first activation.
 // @opt "timeout" - Any possible sequence will be canceled if a key has not
