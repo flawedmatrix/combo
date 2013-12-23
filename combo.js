@@ -301,7 +301,7 @@ Combo.on = function(seq, func, opt) {
 //                   this sequence. False by default.
 //                   This isn't really a big issue unless specifying more keys
 //                   should activate another combo. This is intended for
-//                   single key combos
+//                   single key combos.
 // @opt "fuzzy" - Set true if key combo should not care about any extra
 //                keys. Should generally be used with a timeout for combos.
 //                False by default.
@@ -311,7 +311,9 @@ Combo.on = function(seq, func, opt) {
 //                    existing subsequences (or supersequences if fuzzy input
 //                    is allowed) of this combo to activate. False by default.
 //                    Default behavior is to stop processing any potential
-//                    sequences after the first activation.
+//                    sequences after the first activation. If you have a long
+//                    sequence that includes multiple keys that also have their
+//                    own activations setting this to true will be helpful.
 // @opt "timeout" - Any possible sequence will be canceled if a key has not
 //                  been activated within the timeout period. 0 by default.
 //                  0 means no timeout.
